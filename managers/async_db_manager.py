@@ -73,9 +73,9 @@ class DBManager(BaseSingletonClass):
 
     async def get_or_none_contact_in_contacts(self, phone: int) -> Tables.contacts | None:
         """ Возвращает контакт из таблицы contacts если он там есть """
-
         contact = self.tables.contacts.get_or_none(phone=phone)
-        self.logger.debug(self.sign + f'{contact=}')
+        msg = self.sign + f'{contact=}'
+        self.logger.debug(msg) if contact else self.logger.warning(msg)
         return contact
 
     async def get_or_none_contact_in_bad_contacts(self, phone: int) -> Tables.contacts | None:
@@ -122,5 +122,7 @@ class DBManager(BaseSingletonClass):
 
     async def get_contacts_from_promo_id(self, promo_id: str) -> list[Contact]:
         """ Возвращает список контактов соответствующих promo_id """
+        # args = [(self.tables.contacts.promo_id == promo_id), (self.tables.contacts.num_sends > 0)]
+        # contacts = self.tables.contacts.select().where(*args)
         contacts: Tables.contacts = self.tables.contacts.select().where(self.tables.contacts.promo_id == promo_id)
         return list(contacts)

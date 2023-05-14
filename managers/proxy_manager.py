@@ -1,9 +1,11 @@
+import asyncio
+import time
+
 import aiohttp
 from aiohttp_proxy import ProxyConnector, ProxyType
-from managers.base import BaseSingletonClass
-
 
 from config import CONFIG_PROXY
+from managers.base import BaseSingletonClass
 
 
 class ProxyManager(BaseSingletonClass):
@@ -11,12 +13,12 @@ class ProxyManager(BaseSingletonClass):
 
     async def __call__(self, session_data: dict) -> dict | bool:
         proxy = await self.get_proxy(session_data)
-        return await self.check_proxi(proxy)
+        return proxy
 
-    @staticmethod
-    async def get_proxy(session_data):
+    async def get_proxy(self, session_data):
         """ Возвращает прокси из config если указан или из данных сессии """
         proxy = CONFIG_PROXY
+        data = {'last_ip': None, 'change_time': None}
         if not proxy:
             sd_proxy = session_data.get('proxy')
             proxy = {
@@ -27,17 +29,30 @@ class ProxyManager(BaseSingletonClass):
                 'username': sd_proxy[4],
                 'password': sd_proxy[5],
             }
-        return proxy
-
-    @staticmethod
-    async def check_proxi(proxy):
+        else:
+            check = 'start'
+            while check != 'stop':
+                response = (await self.failed_check_proxi(proxy)).get('response')
+                if not str(response).replace('.', '').isdigit():
+                    self.logger.warning(self.sign + f'{response=}')
+                    continue
+                if data.get('last_ip') and response != data.get('last_ip'):
+                    data['last_ip'] = response
+                    data['change_time'] = int(time.time())
+                    check = 'stop'
+                else:
+                    data['last_ip'] = response
+                    await asyncio.sleep(5)
+                msg = self.sign + f'ip: {response} | tm: {data.get("change_time")}'
+                self.logger.debug(msg) if check != 'stop' else self.logger.info(msg)
         return proxy
 
     async def failed_check_proxi(self, proxy):
         """ Проверяет доступ к прокси """
         url = 'https://check-host.net/ip'
         connector = ProxyConnector(
-            proxy_type=proxy.get('proxy_type'),
+            # proxy_type=proxy.get('proxy_type'),
+            proxy_type=ProxyType.SOCKS5,
             host=proxy.get('addr'),
             port=proxy.get('port'),
             username=proxy.get('username'),
@@ -53,10 +68,5 @@ class ProxyManager(BaseSingletonClass):
                         result = {'response': str(await response.json())}
             except Exception as exc:
                 result = {'response': str(exc)}
-        print(result)
-        if result.get('response') == proxy.get('addr'):
-            self.logger.debug(self.sign + f'GOOD PROXI {proxy=}')
-            return proxy
+        return result
 
-        self.logger.warning(self.sign + f'ERROR PROXI {proxy=}')
-        return False

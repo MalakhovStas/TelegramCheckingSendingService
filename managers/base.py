@@ -128,7 +128,6 @@ class BaseTelegramWorkers(BaseSingletonClass):
                     self.logger.info(self.sign + f'СТАРТ сессии: {session_name} | '
                                                  f'{session_data.get("first_name")} {session_data.get("last_name")}')
                     await self.session_files.session_in_work_status(session_name=session_name, action='start')
-                    signal.alarm(15)
                     await self.start_tg_client(
                         session_name=session_name, session_data=session_data, client=client, contacts=contacts)
 
@@ -171,7 +170,10 @@ class BaseTelegramWorkers(BaseSingletonClass):
                 result = await method(self)
             except BaseException as base_exc:
                 self.logger.error(self.sign + f'Critical ERROR -> {base_exc=}')
-                result = await method(self)
+                if self.__class__.__name__ == "Tester":
+                    result = None
+                else:
+                    result = await method(self)
             return result
 
         return wrapper
@@ -185,7 +187,7 @@ class BaseTelegramWorkers(BaseSingletonClass):
             setattr(cls, '__call__', cls.wrapper_for_call(method))
 
     async def start_tg_client(self, session_name: str, session_data: dict,
-                              client: TelegramClient, contacts: list) -> None:
+                              client: TelegramClient, contacts: list, msg_text: str | None = None) -> None:
         """ Подключение к сессии и старт проверки номеров телефонов на наличие Telegram контактов в классе Checker
         или начало рассылки по контактам в классе Mailer """
 
@@ -195,9 +197,10 @@ class BaseTelegramWorkers(BaseSingletonClass):
 
         @functools.wraps(method)
         async def wrapper(self, session_name: str, session_data: dict,
-                          client: TelegramClient, contacts: list) -> None:
+                          client: TelegramClient, contacts: list, msg_text: str | None = None) -> None:
             try:
-                await method(self, session_name, session_data, client, contacts)
+                signal.alarm(30)
+                await method(self, session_name, session_data, client, contacts, msg_text)
 
             except SignalTimeout as exc:
                 self.logger.warning(self.sign + f'ERROR ошибка подключения к сессии {exc=}')
@@ -213,9 +216,12 @@ class BaseTelegramWorkers(BaseSingletonClass):
 
             finally:
                 try:
+                    signal.alarm(0)
                     await client.__aexit__()
                 except OperationalError:
                     pass
+                except Exception as exc:
+                    self.logger.warning(self.sign + f'{exc=}')
                 # self.logger.info(self.sign + f'finally: {client.is_connected()=}')
             return
 

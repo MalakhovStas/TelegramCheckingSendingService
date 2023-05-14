@@ -5,6 +5,7 @@ from managers.csv_manager import CSVManager
 from managers.checker_manager import Checker
 from managers.message_manager import MessageManager
 from managers.mailer_manager import Mailer
+from managers.test_manager import Tester
 
 
 dbm = DBManager()
@@ -14,3 +15,4 @@ csvm = CSVManager()
 mm = MessageManager()
 checker = Checker(db_manager=dbm, proxy_manager=pm, session_files_manager=sfm, csv_manager=csvm, message_manager=mm)
 mailer = Mailer(db_manager=dbm, proxy_manager=pm, session_files_manager=sfm, csv_manager=csvm, message_manager=mm)
+tester = Tester(db_manager=dbm, proxy_manager=pm, session_files_manager=sfm, csv_manager=csvm, message_manager=mm)

@@ -72,3 +72,17 @@ CONFIG_PROXY = {
     'password': '293aae'
 }
 # 51.79.192.224:10090|username:oskosks9221|password:293aae  # на выходе динамический ip
+
+""" Конфигурация класса Tester для удобства данные ввода можно указать тут или / None """
+
+# убедиться что сессия в категории work_sessions
+# DEF_SESSION_test = None
+SESSION_test = '6283824325618'  # пример
+
+# убедиться что контакт с указанным phone есть в таблице contacts БД
+# DEF_CONTACT_test = None
+# PHONE_CONTACT_test = '79879995522'  # пример
+PHONE_CONTACT_test = '79384849536'  # пример
+
+# DEF_MSG_test = None
+MSG_test = 'Это пример текста сообщения для отправки в приложении тест'

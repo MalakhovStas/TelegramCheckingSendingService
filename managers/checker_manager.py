@@ -15,13 +15,16 @@ from managers.base import BaseTelegramWorkers
 class Checker(BaseTelegramWorkers):
     """ Класс для проверки наличия контакта Telegram связанного с номером телефона """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
     async def __call__(self):
         contacts = await self.db_manager.check_contacts_in_all_tables(await self.csv_manager())
         self.total_contacts = len(contacts)
         await self.start_work_with_contacts(contacts=contacts)
 
     async def start_tg_client(self, session_name: str, session_data: dict,
-                              client: TelegramClient, contacts: list) -> None:
+                              client: TelegramClient, contacts: list, msg_text: str | None = None) -> None:
         """ Подключение к сессии и старт проверки номеров телефонов на наличие Telegram контактов """
 
         async with client:

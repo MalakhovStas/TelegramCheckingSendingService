@@ -9,13 +9,16 @@ from telethon.tl.types import InputPhoneContact, InputPeerUser
 from telethon.tl.types.contacts import ImportedContacts
 
 from managers.base import BaseTelegramWorkers
-from config import MAX_CONTACTS
+from config import MAX_CONTACTS, DEFAULT_QUARANTINE_TIME
 
 
 class Mailer(BaseTelegramWorkers):
     """ Класс для рассылки сообщений по контактам из БД """
     stop_sending_time = 60 * 60
     # stop_sending_time = 60  # минуты для разработки
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     async def __call__(self):
         contacts = await self.input_data()
@@ -28,7 +31,7 @@ class Mailer(BaseTelegramWorkers):
         input_time = ''
 
         while not contacts:
-            promo_id = input('Введите promo_id: ')
+            promo_id = input('Введите promo_id: ').strip()
             # promo_id = 'x_promo321'  # для разработки
 
             contacts = await self.db_manager.get_contacts_from_promo_id(promo_id=promo_id)
@@ -43,12 +46,12 @@ class Mailer(BaseTelegramWorkers):
         return contacts
 
     async def start_tg_client(self, session_name: str, session_data: dict,
-                              client: TelegramClient, contacts: list) -> None:
+                              client: TelegramClient, contacts: list, msg_text: str | None = None) -> None:
         """ Подключение к сессии и старт рассылки """
         contact = contacts[-1]
         text = await self.message_manager(contact)
         phone_book = await self.session_files.get_session_phone_book(session_name, session_data)
-        sent = False
+        sent = 'did_not_go'
 
         async with client:
             signal.alarm(0)
@@ -56,15 +59,19 @@ class Mailer(BaseTelegramWorkers):
 
             if not contact.username:
                 if contact.session_check != session_name:
-                    if contact.session_check in await self.session_files.get_sessions():
-                        if await self.all_checks_for_one_session(session_name=contact.session_check, mailing=True):
-                            self.default_session_name = contact.session_check
-                        else:
-                            contacts.pop(-1)
-                            contacts.insert(0, contact)
-                            self.logger.warning(
-                                self.sign + f'{contact.phone=} -> перемещён в начало списка')
-                        return
+                    # TODO закоментирован блок проверки доступности сессии из которой контакт чекали
+                    # if contact.session_check in await self.session_files.get_sessions():
+                        # if await self.all_checks_for_one_session(session_name=contact.session_check, mailing=True):
+                            # self.default_session_name = contact.session_check
+                            # закоментирована настройка следуещего подключения к выбранной сессии
+                        # else:
+                            # contacts.pop(-1)
+                            # contacts.insert(0, contact)
+                            # self.logger.warning(
+                            #     self.sign + f'{contact.phone=} -> перемещён в начало списка')
+                            # закоментировано перемещение контакта в начало списка если сессия из которой его
+                            # чекали ограничена в доступе
+                        # return
                     if len(phone_book) >= MAX_CONTACTS:
                         return
 
@@ -73,26 +80,34 @@ class Mailer(BaseTelegramWorkers):
                     contact.date_check = datetime.now()
                     contact.session_check = session_name
 
-                    if await self.sender_from_user_id(
-                            user_id=check_user_id, access_hash=access_hash, client=client, text=text):
+                    sent = await self.sender_from_user_id(
+                            user_id=check_user_id, access_hash=access_hash, client=client, text=text)
+                    if sent is True:
                         contact.user_id = check_user_id
-                        sent = True
-
             else:
-                if await self.sender_from_username(username=contact.username, client=client, text=text):
-                    sent = True
-            if sent:
+                sent = await self.sender_from_username(username=contact.username, client=client, text=text)
+
+            if sent is True:
                 self.sent_messages += 1
                 contact.date_last_send = datetime.now()
                 contact.session_last_send = session_name
                 contact.num_sends += 1
-            contact.save()
+                contact.save()
 
-            self.logger.debug(self.sign + f'{contact.user_id=} | {contact.username=} | {sent=}')
-            await self.session_files.update_key_session_json(
-                session_name, key='stop_sending', value=int(time.time()) + self.stop_sending_time)
+                await self.session_files.update_key_session_json(
+                    session_name, key='stop_sending', value=int(time.time()) + self.stop_sending_time)
+                contacts.pop(-1)
 
-            contacts.pop(-1)
+            elif sent is False:
+                error_contact = contacts.pop(-1)
+                contacts.insert(0, error_contact)
+                await self.session_files.update_key_session_json(
+                    session_name, key='quarantine_until', value=int(time.time()) + DEFAULT_QUARANTINE_TIME)
+            else:
+                self.logger.warning(self.sign + f"недостаточно данных для отправки сообщения {contact.user_id=}")
+
+            msg = self.sign + f'{sent=} | {contact.username=} | {contact.user_id=}'
+            self.logger.info(msg) if sent is True else self.logger.warning(msg)
 
     async def get_access_hash(self, phone: str, client: TelegramClient) -> tuple:
         """ Возвращает user_id Telegram контакта и его access_hash в данной сессии  """
@@ -121,7 +136,7 @@ class Mailer(BaseTelegramWorkers):
         """ Отправляет сообщение по user_id и access_hash """
         try:
             user = InputPeerUser(user_id=user_id, access_hash=access_hash)
-            await client.send_message(user, text)
+            await client.send_message(user, text, link_preview=False)
             sent = True
         except Exception as exc:
             cls.logger.warning(f'ERROR: {exc=}')
@@ -132,7 +147,7 @@ class Mailer(BaseTelegramWorkers):
     async def sender_from_username(cls, username: str, client: TelegramClient, text: str) -> bool:
         """ Отправляет сообщение по username """
         try:
-            await client.send_message(username, text)
+            await client.send_message(username, text, link_preview=False)
             sent = True
         except Exception as exc:
             cls.logger.warning(f'ERROR: {exc=}')

@@ -104,6 +104,14 @@ class SessionFilesManager(BaseSingletonClass):
         return result
 
     @classmethod
+    async def check_exists_session(cls, session_name) -> bool:
+        """ Проверяет существует ли сессия в директории work_sessions_dir """
+        exist = os.path.exists(os.path.join(cls.work_sessions_dir, f"{session_name}.json"))
+        msg = f"ОК: {session_name=}" if exist else f"{session_name=} не обнаружена в каталоге: {cls.work_sessions_dir}"
+        cls.logger.debug(msg) if exist else cls.logger.warning(msg)
+        return exist
+
+    @classmethod
     async def get_session_data(cls, session_name) -> dict:
         """ Возвращает данные из json файла сессии """
         with open(f'{cls.work_sessions_dir}{os.sep}{session_name}.json', 'r', encoding='utf-8') as file:
@@ -128,7 +136,7 @@ class SessionFilesManager(BaseSingletonClass):
             data[key] = value
 
         with open(f'{cls.work_sessions_dir}{os.sep}{session_name}.json', 'w', encoding='utf-8') as file:
-            json.dump(data, file, ensure_ascii=False)
+            json.dump(data, file, ensure_ascii=False, indent=4)
 
         cls.logger.info(cls.sign + f'{session_name=} update: {key=} | {value=}')
         return len(data.get(key)) if key == 'phone_book' else value

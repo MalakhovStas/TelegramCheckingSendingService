@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 from managers.base import BaseSingletonClass
 from config import INPUT_FILES_DIR
@@ -26,6 +27,7 @@ class MessageManager(BaseSingletonClass):
             with open(promo_id_text_path, 'r', encoding='utf-8') as file:
                 data = file.read()
 
-            text = data.format(var_1=var_1, var_2=var_2, var_3=var_3)
+            text = data.format(var_1=var_1, var_2=var_2, var_3=var_3,
+                               var_4=datetime.strftime(datetime.now(), '%d.%m.%Y %H:%M:%S'))
 
         return text

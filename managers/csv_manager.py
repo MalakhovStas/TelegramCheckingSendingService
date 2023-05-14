@@ -17,6 +17,7 @@ class CSVManager(BaseSingletonClass):
         with open(INPUT_CSV_FILE_PATH, newline='', encoding='utf-8') as file:
             reader = csv.reader(file)
             for num, row in enumerate(reader, 1):
+                row = [elem.replace("\uFEFF", "").strip('\n').strip() for elem in row]
                 try:
                     contact = {
                         'promo_id': row[0],
